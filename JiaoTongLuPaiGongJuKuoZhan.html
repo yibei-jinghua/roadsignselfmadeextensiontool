@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>交通路牌扩展工具</title>
+<style>
+  :root {
+    --primary: #2563eb;
+    --bg-sidebar: #ffffff;
+    --bg-workspace: #f1f5f9;
+    --border-color: #e2e8f0;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --danger: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg-workspace); color: var(--text-main);
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  
+  .topbar {
+    height: 56px; background: #fff; border-bottom: 1px solid var(--border-color);
+    display: flex; align-items: center; padding: 0 24px; font-weight: 600; font-size: 16px;
+  }
+
+  .layout { display: flex; flex: 1; overflow: hidden; }
+
+  /* 左侧面板 */
+  .sidebar {
+    width: 380px; background: var(--bg-sidebar); border-right: 1px solid var(--border-color);
+    display: flex; flex-direction: column; overflow-y: auto; padding: 20px;
+  }
+  .panel-section { margin-bottom: 20px; }
+  .panel-title {
+    font-size: 13px; font-weight: 600; color: var(--text-muted);
+    margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  
+  .form-group { margin-bottom: 14px; }
+  .form-group label { 
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 13px; margin-bottom: 6px; color: #475569; font-weight: 500;
+  }
+  .form-control {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px;
+    font-size: 14px; color: var(--text-main); outline: none; transition: border .2s;
+  }
+  .form-control:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+
+  .foreign-input {
+    background-color: #f8fafc;
+    border-style: dashed;
+  }
+  .foreign-input:focus { border-style: solid; }
+
+  .row-2 { display: flex; gap: 10px; }
+  .row-2 > div { flex: 1; }
+
+  /* 字体上传区 */
+  .upload-zone {
+    border: 2px dashed #cbd5e1; border-radius: 8px; padding: 12px; text-align: center;
+    cursor: pointer; transition: .2s; background: #f8fafc;
+  }
+  .upload-zone:hover { border-color: var(--primary); background: #eff6ff; }
+  .upload-zone input[type="file"] { display: none; }
+  .upload-text { font-size: 13px; color: var(--primary); font-weight: 500; }
+  .font-status { font-size: 12px; margin-top: 8px; padding: 6px; border-radius: 4px; text-align: center; font-weight: 500;}
+  .font-status.warn { background: #fef3c7; color: #d97706; }
+  .font-status.ok { background: #dcfce7; color: #166534; }
+
+  /* 右侧工作区 */
+  .workspace { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+  
+  /* 模板选择 */
+  .templates {
+    display: flex; gap: 12px; padding: 16px 24px; overflow-x: auto;
+    background: #fff; border-bottom: 1px solid var(--border-color);
+  }
+  .template-card {
+    min-width: 110px; height: 80px; border: 2px solid var(--border-color); border-radius: 8px;
+    background: #f8fafc; cursor: pointer; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 4px; transition: .2s; padding: 6px;
+  }
+  .template-card:hover { border-color: #94a3b8; }
+  .template-card.active { border-color: var(--primary); background: #eff6ff; }
+  .template-card span { font-size: 12px; font-weight: 600; color: #475569; text-align: center;}
+  .template-card.active span { color: var(--primary); }
+
+  /* 画布预览区 */
+  .preview-area {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 40px; position: relative; background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+    background-size: 20px 20px; overflow: auto;
+  }
+  canvas {
+    display: block;
+    box-shadow: 0 20px 40px rgba(0,0,0,.15);
+    max-width: 100%; max-height: 100%;
+  }
+
+  .bottom-bar {
+    padding: 16px 24px; background: #fff; border-top: 1px solid var(--border-color);
+    display: flex; justify-content: flex-end; gap: 12px;
+  }
+  .btn {
+    padding: 10px 24px; border-radius: 6px; font-size: 14px; font-weight: 600;
+    cursor: pointer; border: none; transition: .2s; display: flex; align-items: center; gap: 6px;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-secondary { background: #f1f5f9; color: #475569; border: 1px solid var(--border-color); }
+  .btn-secondary:hover { background: #e2e8f0; }
+
+  /* 确认弹窗 */
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center;
+    z-index: 1000; backdrop-filter: blur(4px);
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: #fff; border-radius: 12px; padding: 24px; width: 460px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2); animation: slideUp 0.2s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .modal-title { font-size: 18px; font-weight: 600; color: var(--text-main); margin-bottom: 12px; }
+  .modal-desc { font-size: 14px; color: var(--text-muted); line-height: 1.6; margin-bottom: 24px; }
+  .modal-footer { display: flex; justify-content: space-between; align-items: center; }
+  .checkbox-group { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--text-muted); }
+  .modal-actions { display: flex; gap: 10px; }
+  .modal-btn { padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; }
+  .modal-btn.cancel { background: #f1f5f9; color: #475569; }
+  .modal-btn.cancel:hover { background: #e2e8f0; }
+  .modal-btn.confirm { background: var(--primary); color: #fff; }
+  .modal-btn.confirm:hover { background: #1d4ed8; }
+</style>
+</head>
+<body>
+
+<div class="topbar">路牌交通扩展</div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <!-- 字体上传 (已置顶) -->
+    <div class="panel-section">
+      <div class="panel-title">字体文件</div>
+      <div class="upload-zone" onclick="document.getElementById('fontFile').click()">
+        <input type="file" id="fontFile" accept=".ttf,.otf">
+        <div class="upload-text">点击上传有效交通字体(建议交通专用字体)</div>
+      </div>
+      <div id="fontStatus" class="font-status warn">未上传，使用系统默认</div>
+    </div>
+
+    <!-- 外观配色 -->
+    <div class="panel-section">
+      <div class="panel-title">路牌配色 (仅隧道/桥梁生效)</div>
+      <div class="form-group">
+        <select id="colorTheme" class="form-control">
+          <option value="green">绿牌</option>
+          <option value="blue">蓝牌 </option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 中文字段设置 -->
+    <div class="panel-section" id="commonTextOptions">
+      <div class="panel-title">文字与翻译设置 (手填)</div>
+      
+      <div class="form-group">
+        <label>第一行 (中文主标题)</label>
+        <input type="text" id="inputTitle" class="form-control" value="大梅关隧道" maxlength="20">
+      </div>
+      <div class="form-group">
+        <input type="text" id="inputForeignTitle" class="form-control foreign-input" value="Dameiguan Tunnel" placeholder="第一行外语 (手填)">
+      </div>
+
+      <div class="form-group" style="margin-top: 10px;">
+        <label>距离数值 (数字)</label>
+        <input type="text" id="inputDistance" class="form-control" value="4585" maxlength="6">
+      </div>
+      
+      <div class="form-group" style="margin-top: 10px;">
+        <label>长度标签</label>
+        <input type="text" id="inputLengthLabel" class="form-control" value="长度" maxlength="12">
+      </div>
+      <div class="form-group">
+        <input type="text" id="inputForeignLength" class="form-control foreign-input" value="Length" placeholder="长度外语 (手填)">
+      </div>
+
+      <div class="form-group" style="margin-top: 10px;">
+        <label>警告/提示语</label>
+        <input type="text" id="inputWarning" class="form-control" value="请开灯行驶" maxlength="20">
+      </div>
+      <div class="form-group">
+        <input type="text" id="inputForeignWarning" class="form-control foreign-input" value="Turn on headlights" placeholder="警告外语 (手填)">
+      </div>
+    </div>
+
+    <!-- 里程标专属设置 -->
+    <div class="panel-section" id="kmOptions" style="display: none;">
+      <div class="panel-title">里程标专属设置</div>
+      <div class="form-group">
+        <label>公里数 (如 261)</label>
+        <input type="text" id="inputKmValue" class="form-control" value="261" maxlength="4">
+      </div>
+      <div class="form-group">
+        <label>路线编号 (如 G6011)</label>
+        <input type="text" id="inputRoute" class="form-control" value="G6011" maxlength="300">
+      </div>
+    </div>
+
+    <!-- 百米牌专属设置 -->
+    <div class="panel-section" id="hmOptions" style="display: none;">
+      <div class="panel-title">百米牌专属设置</div>
+      <div class="form-group">
+        <label>百米数 (1-9)</label>
+        <input type="text" id="inputHundred" class="form-control" value="7" maxlength="1">
+      </div>
+      <div class="form-group">
+        <label>里程数 (如 400)</label>
+        <input type="text" id="inputHmValue" class="form-control" value="400" maxlength="4">
+      </div>
+    </div>
+
+    <!-- 限速牌专属设置 -->
+    <div class="panel-section" id="speedOptions" style="display: none;">
+      <div class="panel-title">限速牌设置</div>
+      <div class="form-group">
+        <label>限速类型</label>
+        <select id="speedType" class="form-control">
+          <option value="max">最高限速 (红圈黑字)</option>
+          <option value="min">最低限速 (蓝底白边)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>限速值 (如 120)</label>
+        <input type="text" id="inputSpeedValue" class="form-control" value="120" maxlength="3">
+      </div>
+    </div>
+
+    <!-- 排版参数 -->
+    <div class="panel-section">
+      <div class="panel-title">排版与外观</div>
+      
+      <div class="row-2">
+        <div class="form-group">
+          <label>高: <span id="hVal">550</span>px</label>
+          <input type="range" id="inputHeight" min="200" max="1000" step="10" value="550">
+        </div>
+        <div class="form-group">
+          <label>画布留白比: <span id="ratioVal">1.0</span></label>
+          <input type="range" id="inputRatio" min="0.8" max="1.5" step="0.1" value="1.0">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>字体粗细: <span id="weightVal">700</span></label>
+        <input type="range" id="inputWeight" min="100" max="900" step="100" value="700">
+      </div>
+
+      <div class="form-group">
+        <label>文字横向拉伸 (X): <span id="scaleXVal">1.0</span></label>
+        <input type="range" id="inputScaleX" min="0.5" max="2.0" step="0.1" value="1.0">
+      </div>
+      
+      <div class="form-group">
+        <label>文字纵向拉伸 (Y): <span id="scaleYVal">1.0</span></label>
+        <input type="range" id="inputScaleY" min="0.5" max="2.0" step="0.1" value="1.0">
+      </div>
+
+      <div class="form-group">
+        <label>圆角大小 (仅方形生效): <span id="radiusVal">15</span>px</label>
+        <input type="range" id="inputRadius" min="0" max="60" step="1" value="15">
+      </div>
+
+      <div class="form-group">
+        <label>背景不透明度: <span id="opacityVal">100</span>%</label>
+        <input type="range" id="inputOpacity" min="10" max="100" step="5" value="100">
+      </div>
+    </div>
+  </aside>
+
+  <main class="workspace">
+    <div class="templates" id="templateContainer">
+      <div class="template-card active" data-type="tunnel">
+        <span>隧道提示牌<br>(三层)</span>
+      </div>
+      <div class="template-card" data-type="blue_sign">
+        <span>指示蓝牌<br>(极简)</span>
+      </div>
+      <div class="template-card" data-type="bridge">
+        <span>桥梁路名牌<br>(中英两行)</span>
+      </div>
+      <div class="template-card" data-type="speed_limit">
+        <span>限速牌<br>(最高/最低)</span>
+      </div>
+      <div class="template-card" data-type="km_marker">
+        <span>高速里程标<br>(切角平底)</span>
+      </div>
+      <div class="template-card" data-type="hm_marker">
+        <span>高速百米牌<br>(圆形)</span>
+      </div>
+    </div>
+
+    <div class="preview-area">
+      <canvas id="signCanvas"></canvas>
+    </div>
+
+    <div class="bottom-bar">
+      <button class="btn btn-secondary" id="btnReset">恢复默认值</button>
+      <button class="btn btn-primary" id="btnExport">导出高清 PNG</button>
+    </div>
+  </main>
+</div>
+
+<!-- 声明弹窗 -->
+<div class="modal-overlay" id="alertModal">
+  <div class="modal">
+    <div class="modal-title">关于本工具</div>
+    <div class="modal-desc">
+      本工具纯便利化，无次数限制，无需账号登录，由哔哩哔哩一杯精华jinghua使用deepseek所创建的工具，由于ai生成的代码，bug可能比较多(本人也不会写编程TAT)。<br><br>
+      但是大家可以修改，但是<b>不能盈利、商业化，做恶搞低俗内容！</b>
+    </div>
+    <div class="modal-footer" style="justify-content: flex-end;">
+      <div class="modal-actions">
+        <button class="modal-btn confirm" id="btnCloseAlert">我知道了</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 恢复默认值 确认弹窗 -->
+<div class="modal-overlay" id="resetModal">
+  <div class="modal">
+    <div class="modal-title">确认恢复默认值？</div>
+    <div class="modal-desc">当前上传的自定义字体、文字修改和排版设置都将丢失，恢复为初始状态。</div>
+    <div class="modal-footer">
+      <label class="checkbox-group">
+        <input type="checkbox" id="chkNoPrompt"> 不再提示
+      </label>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" id="btnCancelReset">取消</button>
+        <button class="modal-btn confirm" id="btnConfirmReset">确认恢复</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const canvas = document.getElementById('signCanvas');
+  const ctx = canvas.getContext('2d');
+  
+  const el = id => document.getElementById(id);
+  const inputTitle = el('inputTitle'), inputForeignTitle = el('inputForeignTitle');
+  const inputDistance = el('inputDistance');
+  const inputLengthLabel = el('inputLengthLabel'), inputForeignLength = el('inputForeignLength');
+  const inputWarning = el('inputWarning'), inputForeignWarning = el('inputForeignWarning');
+  const colorTheme = el('colorTheme');
+  
+  const commonTextOptions = el('commonTextOptions'), speedOptions = el('speedOptions');
+  const kmOptions = el('kmOptions'), hmOptions = el('hmOptions');
+  
+  const speedType = el('speedType'), inputSpeedValue = el('inputSpeedValue');
+  const inputKmValue = el('inputKmValue'), inputRoute = el('inputRoute');
+  const inputHundred = el('inputHundred'), inputHmValue = el('inputHmValue');
+  
+  const inputHeight = el('inputHeight'), inputRatio = el('inputRatio'), inputWeight = el('inputWeight');
+  const inputScaleX = el('inputScaleX'), inputScaleY = el('inputScaleY');
+  const inputRadius = el('inputRadius'), inputOpacity = el('inputOpacity');
+  
+  const hVal = el('hVal'), ratioVal = el('ratioVal'), weightVal = el('weightVal');
+  const scaleXVal = el('scaleXVal'), scaleYVal = el('scaleYVal');
+  const radiusVal = el('radiusVal'), opacityVal = el('opacityVal');
+  
+  const fontFile = el('fontFile'), fontStatus = el('fontStatus');
+  const templateCards = document.querySelectorAll('.template-card');
+
+  const alertModal = el('alertModal'), btnCloseAlert = el('btnCloseAlert');
+  const resetModal = el('resetModal');
+  const chkNoPrompt = el('chkNoPrompt');
+  const btnReset = el('btnReset');
+  const btnCancelReset = el('btnCancelReset');
+  const btnConfirmReset = el('btnConfirmReset');
+
+  const DPR = window.devicePixelRatio || 1;
+  let loadedFontName = null;
+  let currentTemplate = 'tunnel';
+  let skipPrompt = false;
+
+  // 获取配色主题（仅在隧道和桥梁中生效）
+  function getTheme() {
+    return colorTheme.value === 'blue' ? '#1E5AA8' : '#007B3E';
+  }
+
+  // 弹窗控制
+  btnCloseAlert.addEventListener('click', () => {
+    alertModal.classList.remove('active');
+  });
+
+  // 核心渲染
+  function render() {
+    const H = parseInt(inputHeight.value);
+    const ratio = parseFloat(inputRatio.value);
+    const radius = parseInt(inputRadius.value);
+    const opacity = parseInt(inputOpacity.value) / 100;
+    const weight = inputWeight.value;
+    const scaleX = parseFloat(inputScaleX.value);
+    const scaleY = parseFloat(inputScaleY.value);
+    const themeColor = getTheme();
+
+    const titleText = inputTitle.value.trim();
+    const fTitleText = inputForeignTitle.value.trim();
+    const distanceText = inputDistance.value.trim();
+    const lengthLabel = inputLengthLabel.value.trim();
+    const fLengthText = inputForeignLength.value.trim();
+    const warningText = inputWarning.value.trim();
+    const fWarningText = inputForeignWarning.value.trim();
+
+    // === 动态计算宽度 (自动加宽功能) ===
+    const tempFontSize = H * 0.18;
+    ctx.font = `${weight} ${tempFontSize}px "${loadedFontName || 'SimHei'}"`;
+    
+    let maxTextWidth = 0;
+    const measureText = (text, size) => {
+      if(!text) return 0;
+      ctx.font = `${weight} ${size}px "${loadedFontName || 'SimHei'}"`;
+      return ctx.measureText(text).width * scaleX;
+    };
+
+    if (currentTemplate === 'tunnel') {
+      const w1 = measureText(titleText, H * 0.22);
+      const w2 = measureText(fTitleText, H * 0.1);
+      const w3 = measureText(distanceText + ' m', H * 0.2) + measureText(lengthLabel + ' :', H * 0.15);
+      maxTextWidth = Math.max(w1, w2, w3);
+    } else if (currentTemplate === 'bridge') {
+      maxTextWidth = Math.max(
+        measureText(titleText, H * 0.16),
+        measureText(fTitleText, H * 0.07),
+        measureText(distanceText + ' m', H * 0.15) + measureText(lengthLabel + ' :', H * 0.15)
+      );
+    } else if (currentTemplate === 'blue_sign') {
+      maxTextWidth = Math.max(
+        measureText(titleText, H * 0.18),
+        measureText(fTitleText, H * 0.08),
+        measureText(distanceText + ' m', H * 0.12)
+      );
+    }
+
+    let W = Math.max(H * 1.2, maxTextWidth / ratio + H * 0.5);
+    W = Math.ceil(W);
+
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.scale(DPR, DPR);
+    ctx.clearRect(0, 0, W, H);
+
+    function drawText(text, x, y, size, color, align='center', baseline='middle') {
+      if(!text) return;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scaleX, scaleY);
+      ctx.fillStyle = color;
+      ctx.font = `${weight} ${size}px ${loadedFontName ? `"${loadedFontName}", "SimHei"` : '"SimHei"'}`;
+      ctx.textAlign = align;
+      ctx.textBaseline = baseline;
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+    }
+
+    function createRoundRectPath(x, y, w, h, r) {
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(x, y, w, h, r);
+      } else {
+        ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+      }
+    }
+
+    // 1. 指示蓝牌
+    if (currentTemplate === 'blue_sign') {
+      ctx.globalAlpha = opacity;
+      createRoundRectPath(0, 0, W, H, radius);
+      ctx.fillStyle = '#1E5AA8'; ctx.fill();
+      ctx.lineWidth = 8; ctx.strokeStyle = '#fff'; ctx.stroke();
+
+      let lines = [];
+      if (titleText) lines.push({ text: titleText, size: H * 0.18, spacing: H * 0.01 });
+      if (fTitleText) lines.push({ text: fTitleText, size: H * 0.08, spacing: H * 0.12 });
+      if (distanceText) lines.push({ text: distanceText + ' m', size: H * 0.12, spacing: H * 0.05 });
+
+      let totalH = 0;
+      lines.forEach((line, i) => {
+        totalH += line.size;
+        if (i < lines.length - 1) totalH += line.spacing;
+      });
+
+      let currentY = (H - totalH) / 2;
+      lines.forEach(line => {
+        drawText(line.text, W * 0.5, currentY + line.size / 2, line.size, '#fff');
+        currentY += line.size + line.spacing;
+      });
+    }
+
+    // 2. 隧道提示牌
+    else if (currentTemplate === 'tunnel') {
+      ctx.globalAlpha = opacity;
+      createRoundRectPath(0, 0, W, H, radius);
+      ctx.fillStyle = themeColor; ctx.fill();
+      
+      const yellowH = H * 0.25, yellowY = H - yellowH;
+      ctx.save();
+      createRoundRectPath(0, 0, W, H, radius); ctx.clip(); 
+      ctx.fillStyle = '#F2B300'; ctx.fillRect(0, yellowY, W, yellowH);
+      ctx.restore();
+
+      const splitY = (H - yellowH) / 2;
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(0, splitY); ctx.lineTo(W, splitY); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, yellowY); ctx.lineTo(W, yellowY); ctx.stroke();
+
+      createRoundRectPath(0, 0, W, H, radius);
+      ctx.lineWidth = 10; ctx.strokeStyle = '#fff'; ctx.stroke();
+
+      // 隧道图标
+      const iconW = H * 0.12, iconH = splitY * 0.6, iconX = H * 0.06, iconY = (splitY - iconH) / 2;
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(4, iconW * 0.1); ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(iconX, iconY + iconH); ctx.lineTo(iconX, iconY + iconH * 0.35);
+      ctx.quadraticCurveTo(iconX, iconY, iconX + iconW/2, iconY);
+      ctx.quadraticCurveTo(iconX + iconW, iconY, iconX + iconW, iconY + iconH * 0.35);
+      ctx.lineTo(iconX + iconW, iconY + iconH); ctx.stroke();
+      
+      const innerPadding = iconW * 0.25;
+      const innerW = iconW - innerPadding * 2, innerH = iconH * 0.7;
+      const innerX = iconX + innerPadding, innerY = iconY + iconH - innerH;
+      ctx.beginPath();
+      ctx.moveTo(innerX, innerY + innerH); ctx.lineTo(innerX, innerY + innerH * 0.35);
+      ctx.quadraticCurveTo(innerX, innerY, innerX + innerW/2, innerY);
+      ctx.quadraticCurveTo(innerX + innerW, innerY, innerX + innerW, innerY + innerH * 0.35);
+      ctx.lineTo(innerX + innerW, innerY + innerH); ctx.stroke();
+
+      let topLines = [];
+      if (titleText) topLines.push({ text: titleText, size: splitY * 0.45, spacing: splitY * 0.02 });
+      if (fTitleText) topLines.push({ text: fTitleText, size: splitY * 0.15, spacing: splitY * 0.05 });
+      
+      let topTotalH = 0;
+      topLines.forEach((l, i) => {
+        topTotalH += l.size;
+        if (i < topLines.length - 1) topTotalH += l.spacing;
+      });
+      
+      let topY = (splitY - topTotalH) / 2;
+      topLines.forEach(line => {
+        drawText(line.text, W * 0.55, topY + line.size / 2, line.size, '#fff');
+        topY += line.size + line.spacing;
+      });
+
+      drawText(lengthLabel + ' :', W * 0.25, splitY + (yellowY - splitY) * 0.35, splitY * 0.25, '#fff');
+      if (fLengthText) {
+        drawText(fLengthText, W * 0.25, splitY + (yellowY - splitY) * 0.75, splitY * 0.12, '#fff');
+      }
+      drawText(distanceText + ' m', W * 0.7, splitY + (yellowY - splitY) * 0.5, splitY * 0.4, '#fff');
+
+      let hasFWarning = !!fWarningText;
+      let warningY = yellowY + yellowH * (hasFWarning ? 0.35 : 0.5);
+      drawText(warningText, W * 0.5, warningY, yellowH * 0.45, '#000');
+      if (hasFWarning) {
+        drawText(fWarningText, W * 0.5, yellowY + yellowH * 0.75, yellowH * 0.15, '#000');
+      }
+    }
+
+    // 3. 桥梁路名牌
+    else if (currentTemplate === 'bridge') {
+      ctx.globalAlpha = opacity;
+      createRoundRectPath(0, 0, W, H, radius);
+      ctx.fillStyle = themeColor; ctx.fill();
+      ctx.lineWidth = 10; ctx.strokeStyle = '#fff'; ctx.stroke();
+
+      const splitY = H * 0.6;
+      ctx.beginPath(); ctx.moveTo(0, splitY); ctx.lineTo(W, splitY); ctx.lineWidth = 6; ctx.stroke();
+
+      let lines = [];
+      if (titleText) lines.push({ text: titleText, size: H * 0.16, spacing: H * 0.02 });
+      if (fTitleText) lines.push({ text: fTitleText, size: H * 0.07, spacing: 0 });
+
+      let totalH = 0;
+      lines.forEach((line, i) => {
+        totalH += line.size;
+        if (i < lines.length - 1) totalH += line.spacing;
+      });
+
+      let currentY = (splitY - totalH) / 2;
+      lines.forEach(line => {
+        drawText(line.text, W * 0.5, currentY + line.size / 2, line.size, '#fff');
+        currentY += line.size + line.spacing;
+      });
+
+      drawText(lengthLabel + ' :', W * 0.3, splitY + (H - splitY) * 0.35, H * 0.15, '#fff');
+      if (fLengthText) {
+        drawText(fLengthText, W * 0.3, splitY + (H - splitY) * 0.75, H * 0.06, '#fff');
+      }
+      drawText(distanceText + ' m', W * 0.7, splitY + (H - splitY) * 0.5, H * 0.15, '#fff');
+    }
+
+    // 4. 限速牌
+    else if (currentTemplate === 'speed_limit') {
+      const R = H * 0.45;
+      const cx = W / 2, cy = H / 2;
+      const type = speedType.value;
+      const speedVal = inputSpeedValue.value;
+      
+      ctx.globalAlpha = opacity;
+      
+      if (type === 'min') {
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+        ctx.fillStyle = '#1E5AA8'; ctx.fill();
+        ctx.lineWidth = R * 0.05; ctx.strokeStyle = '#fff'; ctx.stroke();
+        ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+        ctx.fillStyle = '#fff'; ctx.fillRect(cx - R, cy + R * 0.8, R * 2, R * 0.2); ctx.restore();
+        drawText(speedVal, cx, cy - R*0.1, R * 0.8, '#fff');
+      } else {
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff'; ctx.fill();
+        ctx.lineWidth = R * 0.15; ctx.strokeStyle = '#D9001B'; ctx.stroke();
+        drawText(speedVal, cx, cy + R*0.05, R * 0.8, '#000');
+      }
+    }
+
+    // 5. 高速里程标
+    else if (currentTemplate === 'km_marker') {
+      ctx.globalAlpha = opacity;
+      
+      const margin = H * 0.1;
+      const w = Math.min(W - margin * 2, H * 0.8); 
+      const h = H - margin * 2;
+      const x = (W - w) / 2;
+      const y = margin;
+      
+      const cut = w * 0.15;
+
+      ctx.beginPath();
+      ctx.moveTo(x, y); ctx.lineTo(x + w, y); 
+      ctx.lineTo(x + w, y + h - cut); ctx.lineTo(x + w - cut, y + h); 
+      ctx.lineTo(x + cut, y + h); ctx.lineTo(x, y + h - cut); 
+      ctx.closePath();
+      ctx.fillStyle = '#fff'; ctx.fill();
+
+      const pad = H * 0.04;
+      const iw = w - pad * 2, ih = h - pad * 2;
+      const ix = x + pad, iy = y + pad;
+      const iCut = cut - pad * 0.5;
+
+      ctx.beginPath();
+      ctx.moveTo(ix, iy); ctx.lineTo(ix + iw, iy); 
+      ctx.lineTo(ix + iw, iy + ih - iCut); ctx.lineTo(ix + iw - iCut, iy + ih); 
+      ctx.lineTo(ix + iCut, iy + ih); ctx.lineTo(ix, iy + ih - iCut); 
+      ctx.closePath();
+      ctx.fillStyle = '#007B3E'; ctx.fill();
+
+      drawText(inputKmValue.value, W * 0.5, y + h * 0.35, h * 0.45, '#fff');
+      drawText(inputRoute.value, W * 0.5, y + h * 0.75, h * 0.22, '#fff');
+    }
+
+    // 6. 高速百米牌
+    else if (currentTemplate === 'hm_marker') {
+      const R = H * 0.45;
+      const cx = W / 2, cy = H / 2;
+      const themeColor = '#007B3E';
+      
+      ctx.globalAlpha = opacity;
+      
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff'; ctx.fill();
+      
+      ctx.beginPath(); ctx.arc(cx, cy, R - 6, 0, Math.PI * 2);
+      ctx.fillStyle = themeColor; ctx.fill();
+
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx, cy, R - 6, 0, Math.PI * 2); ctx.clip();
+      ctx.fillStyle = '#fff'; ctx.fillRect(cx - R, cy + R * 0.3, R * 2, R * 0.7);
+      ctx.restore();
+      
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(cx - R * 0.85, cy + R * 0.3); ctx.lineTo(cx + R * 0.85, cy + R * 0.3); ctx.stroke();
+
+      drawText(inputHundred.value, cx, cy - R * 0.2, R * 0.7, '#fff');
+      drawText(inputHmValue.value, cx, cy + R * 0.65, R * 0.35, themeColor);
+    }
+  }
+
+  // 恢复默认值
+  function resetToDefault() {
+    inputHeight.value = 550; inputRatio.value = 1.0; inputWeight.value = 700;
+    inputScaleX.value = 1.0; inputScaleY.value = 1.0;
+    inputRadius.value = 15; inputOpacity.value = 100;
+    hVal.textContent = '550'; ratioVal.textContent = '1.0'; weightVal.textContent = '700'; scaleXVal.textContent = '1.0'; scaleYVal.textContent = '1.0';
+    radiusVal.textContent = '15'; opacityVal.textContent = '100';
+
+    inputTitle.value = '大梅关隧道'; inputForeignTitle.value = 'Dameiguan Tunnel';
+    inputDistance.value = '4585'; inputLengthLabel.value = '长度'; inputForeignLength.value = 'Length';
+    inputWarning.value = '请开灯行驶'; inputForeignWarning.value = 'Turn on headlights';
+    inputKmValue.value = '261'; inputRoute.value = 'G6011';
+    inputHundred.value = '7'; inputHmValue.value = '400';
+    inputSpeedValue.value = '120'; speedType.value = 'max';
+    colorTheme.value = 'green';
+
+    loadedFontName = null;
+    fontStatus.className = 'font-status warn';
+    fontStatus.textContent = '未上传，使用系统默认';
+    fontFile.value = '';
+
+    templateCards.forEach(c => c.classList.remove('active'));
+    document.querySelector('[data-type="tunnel"]').classList.add('active');
+    currentTemplate = 'tunnel';
+    
+    commonTextOptions.style.display = 'block';
+    speedOptions.style.display = 'none';
+    kmOptions.style.display = 'none';
+    hmOptions.style.display = 'none';
+
+    render();
+  }
+
+  // 事件绑定
+  let timer;
+  function scheduleRender() { clearTimeout(timer); timer = setTimeout(render, 30); }
+  
+  document.querySelectorAll('input[type="text"], select').forEach(item => {
+    item.addEventListener('input', scheduleRender);
+  });
+
+  [inputHeight, inputRatio, inputWeight, inputScaleX, inputScaleY, inputRadius, inputOpacity].forEach(item => {
+    item.addEventListener('input', function() {
+      if(this.id === 'inputHeight') hVal.textContent = this.value;
+      if(this.id === 'inputRatio') ratioVal.textContent = this.value;
+      if(this.id === 'inputWeight') weightVal.textContent = this.value;
+      if(this.id === 'inputScaleX') scaleXVal.textContent = this.value;
+      if(this.id === 'inputScaleY') scaleYVal.textContent = this.value;
+      if(this.id === 'inputRadius') radiusVal.textContent = this.value;
+      if(this.id === 'inputOpacity') opacityVal.textContent = this.value;
+      scheduleRender();
+    });
+  });
+
+  templateCards.forEach(card => {
+    card.addEventListener('click', function() {
+      templateCards.forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+      currentTemplate = this.dataset.type;
+      
+      commonTextOptions.style.display = 'block';
+      speedOptions.style.display = 'none';
+      kmOptions.style.display = 'none';
+      hmOptions.style.display = 'none';
+      
+      if (currentTemplate === 'speed_limit') {
+        commonTextOptions.style.display = 'none';
+        speedOptions.style.display = 'block';
+      } else if (currentTemplate === 'km_marker') {
+        commonTextOptions.style.display = 'none';
+        kmOptions.style.display = 'block';
+      } else if (currentTemplate === 'hm_marker') {
+        commonTextOptions.style.display = 'none';
+        hmOptions.style.display = 'block';
+      } else {
+        if (currentTemplate === 'blue_sign') {
+          inputTitle.value = '前方出口'; inputForeignTitle.value = 'EXIT AHEAD'; inputDistance.value = '';
+        } else if (currentTemplate === 'tunnel') {
+          inputTitle.value = '大梅关隧道'; inputForeignTitle.value = 'Dameiguan Tunnel'; inputDistance.value = '4585'; 
+        } else if (currentTemplate === 'bridge') {
+          inputTitle.value = '白龙山高架桥'; inputForeignTitle.value = 'BAILONGSHAN BRIDGE'; inputDistance.value = '1200'; 
+        }
+      }
+      render();
+    });
+  });
+
+  fontFile.addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    fontStatus.className = 'font-status warn';
+    fontStatus.textContent = '正在加载字体...';
+    try {
+      const buffer = await file.arrayBuffer();
+      const fontName = 'UserFont_' + Date.now();
+      const fontFace = new FontFace(fontName, buffer);
+      await fontFace.load();
+      document.fonts.add(fontFace);
+      loadedFontName = fontName;
+      fontStatus.className = 'font-status ok';
+      fontStatus.textContent = `✅ 已加载: ${file.name}`;
+      render();
+    } catch (err) {
+      fontStatus.className = 'font-status warn';
+      fontStatus.textContent = '❌ 加载失败';
+      loadedFontName = null;
+      render();
+    }
+  });
+
+  btnReset.addEventListener('click', () => {
+    if (skipPrompt) resetToDefault();
+    else resetModal.classList.add('active');
+  });
+
+  btnCancelReset.addEventListener('click', () => resetModal.classList.remove('active'));
+  btnConfirmReset.addEventListener('click', () => {
+    if (chkNoPrompt.checked) skipPrompt = true;
+    resetModal.classList.remove('active');
+    resetToDefault();
+  });
+  resetModal.addEventListener('click', (e) => { if (e.target === resetModal) resetModal.classList.remove('active'); });
+
+  el('btnExport').addEventListener('click', () => {
+    render(); 
+    const link = document.createElement('a');
+    link.download = `路牌交通扩展_${currentTemplate}_${Date.now()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+
+  // 初始化
+  render();
+  
+  // 页面加载后弹出提示框
+  setTimeout(() => {
+    alertModal.classList.add('active');
+  }, 300);
+  
+})();
+</script>
+</body>
+</html>
